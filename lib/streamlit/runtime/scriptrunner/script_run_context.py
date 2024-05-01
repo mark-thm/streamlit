@@ -33,6 +33,7 @@ from streamlit.runtime.uploaded_file_manager import UploadedFileManager
 
 if TYPE_CHECKING:
     from streamlit.runtime.fragment import FragmentStorage
+    from streamlit.source_util import PagesManager
 
 _LOGGER: Final = get_logger(__name__)
 
@@ -63,6 +64,7 @@ class ScriptRunContext:
     page_script_hash: str
     user_info: UserInfo
     fragment_storage: "FragmentStorage"
+    pages_manager: "PagesManager"
 
     gather_usage_stats: bool = False
     command_tracking_deactivated: bool = False

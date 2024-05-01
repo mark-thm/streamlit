@@ -682,7 +682,7 @@ class ButtonMixin:
         requested_page = os.path.realpath(
             normalize_path_join(main_script_directory, page)
         )
-        all_app_pages = source_util.get_pages(ctx_main_script).values()
+        all_app_pages = ctx.pages_manager.get_pages(ctx_main_script).values()
 
         # Handle retrieving the page_script_hash & page
         for page_data in all_app_pages:

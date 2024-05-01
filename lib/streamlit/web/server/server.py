@@ -368,6 +368,7 @@ class Server:
                         {
                             "path": "%s/" % static_path,
                             "default_filename": "index.html",
+                            # TODO(kmcgrady): This won't work in a multi-page v2 app.
                             "get_pages": lambda: {
                                 page_info["page_name"]
                                 for page_info in source_util.get_pages(

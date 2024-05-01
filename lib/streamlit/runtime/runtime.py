@@ -563,7 +563,6 @@ class Runtime:
             uploaded_file_manager=self._uploaded_file_mgr,
             script_cache=self._script_cache,
             message_enqueued_callback=self._enqueued_some_message,
-            local_sources_watcher=LocalSourcesWatcher(self._main_script_path),
             user_info={"email": "test@test.com"},
         )
 

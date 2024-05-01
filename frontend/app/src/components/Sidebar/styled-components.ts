@@ -360,3 +360,19 @@ export const StyledCollapseSidebarButton = styled.div(({ theme }) => {
     },
   }
 })
+
+export const StyledSidebarNavSectionHeader = styled.header(({ theme }) => {
+  const isLightTheme = hasLightBackgroundColor(theme)
+
+  return {
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.bold,
+    color: isLightTheme ? theme.colors.gray80 : theme.colors.gray50,
+    lineHeight: theme.lineHeights.table,
+    paddingRight: theme.spacing.sm,
+    marginLeft: theme.spacing.twoXL,
+    marginRight: theme.spacing.twoXL,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.twoXS,
+  }
+})

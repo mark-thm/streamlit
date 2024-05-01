@@ -84,6 +84,7 @@ import {
   IGitInfo,
   Initialize,
   Logo,
+  Navigation,
   NewSession,
   PageConfig,
   PageInfo,
@@ -153,6 +154,7 @@ interface State {
   hideSidebarNav: boolean
   appLogo: Logo | null
   appPages: IAppPage[]
+  navPageSections: Map<string, { start: number; length: number }>
   currentPageScriptHash: string
   latestRunTime: number
   fragmentIdsThisRun: Array<string>
@@ -261,6 +263,7 @@ export class App extends PureComponent<Props, State> {
       formsData: createFormsData(),
       appLogo: null,
       appPages: [],
+      navPageSections: new Map(),
       currentPageScriptHash: "",
       // We set hideTopBar to true by default because this information isn't
       // available on page load (we get it when the script begins to run), so
@@ -620,6 +623,8 @@ export class App extends PureComponent<Props, State> {
             deltaMsg,
             msgProto.metadata as ForwardMsgMetadata
           ),
+        navigation: (navigationMsg: Navigation) =>
+          this.handleNavigation(navigationMsg),
         pageConfigChanged: (pageConfig: PageConfig) =>
           this.handlePageConfigChanged(pageConfig),
         pageInfoChanged: (pageInfo: PageInfo) =>
@@ -721,6 +726,29 @@ export class App extends PureComponent<Props, State> {
   handlePagesChanged = (pagesChangedMsg: PagesChanged): void => {
     const { appPages } = pagesChangedMsg
     this.setState({ appPages }, () => {
+      this.hostCommunicationMgr.sendMessageToHost({
+        type: "SET_APP_PAGES",
+        appPages,
+      })
+    })
+  }
+
+  handleNavigation = (navigationMsg: Navigation): void => {
+    const { sections, position } = navigationMsg
+    const navPageSections = new Map()
+    let idx = 0
+    for (const section of sections) {
+      const sectionLength = (section.appPages || []).length
+      navPageSections.set(section.header || "", {
+        start: idx,
+        length: sectionLength,
+      })
+      idx += sectionLength
+    }
+    const appPages = sections.flatMap(section => section.appPages || [])
+    const hideSidebarNav = position == "hidden"
+
+    this.setState({ appPages, navPageSections, hideSidebarNav }, () => {
       this.hostCommunicationMgr.sendMessageToHost({
         type: "SET_APP_PAGES",
         appPages,
@@ -1842,6 +1870,7 @@ export class App extends PureComponent<Props, State> {
                 formsData={this.state.formsData}
                 appLogo={this.state.appLogo}
                 appPages={this.state.appPages}
+                navPageSections={this.state.navPageSections}
                 onPageChange={this.onPageChange}
                 currentPageScriptHash={currentPageScriptHash}
                 hideSidebarNav={hideSidebarNav || hostHideSidebarNav}

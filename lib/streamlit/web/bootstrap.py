@@ -34,7 +34,6 @@ from streamlit import (
 from streamlit.config import CONFIG_FILENAMES
 from streamlit.git_util import MIN_GIT_VERSION, GitRepo
 from streamlit.logger import get_logger
-from streamlit.source_util import invalidate_pages_cache
 from streamlit.watcher import report_watchdog_availability, watch_dir, watch_file
 from streamlit.web.server import Server, server_address_is_unix_socket, server_util
 
@@ -352,9 +351,10 @@ def _install_config_watchers(flag_options: dict[str, Any]) -> None:
             watch_file(filename, on_config_changed)
 
 
+# TODO(kmcgrady): This should have some management on the Pages Manager
 def _install_pages_watcher(main_script_path_str: str) -> None:
     def _on_pages_changed(_path: str) -> None:
-        invalidate_pages_cache()
+        print("Pages should invalidate")
 
     main_script_path = Path(main_script_path_str)
     pages_dir = main_script_path.parent / "pages"

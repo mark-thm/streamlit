@@ -21,7 +21,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Callable, Final
 
 import streamlit.elements.exception as exception_utils
-from streamlit import config, runtime, source_util
+from streamlit import config, runtime
 from streamlit.case_converters import to_snake_case
 from streamlit.logger import get_logger
 from streamlit.proto.BackMsg_pb2 import BackMsg
@@ -45,6 +45,7 @@ from streamlit.runtime.scriptrunner import RerunData, ScriptRunner, ScriptRunner
 from streamlit.runtime.scriptrunner.script_cache import ScriptCache
 from streamlit.runtime.secrets import secrets_singleton
 from streamlit.runtime.uploaded_file_manager import UploadedFileManager
+from streamlit.source_util import PagesManager
 from streamlit.version import STREAMLIT_VERSION_STRING
 from streamlit.watcher import LocalSourcesWatcher
 
@@ -83,7 +84,6 @@ class AppSession:
         uploaded_file_manager: UploadedFileManager,
         script_cache: ScriptCache,
         message_enqueued_callback: Callable[[], None] | None,
-        local_sources_watcher: LocalSourcesWatcher,
         user_info: dict[str, str | None],
         session_id_override: str | None = None,
     ) -> None:
@@ -131,6 +131,7 @@ class AppSession:
         self._script_data = script_data
         self._uploaded_file_mgr = uploaded_file_manager
         self._script_cache = script_cache
+        self._pages_manager = PagesManager(self._script_data.main_script_path)
 
         # The browser queue contains messages that haven't yet been
         # delivered to the browser. Periodically, the server flushes
@@ -144,7 +145,9 @@ class AppSession:
         # due to the source code changing we need to pass in the previous client state.
         self._client_state = ClientState()
 
-        self._local_sources_watcher: LocalSourcesWatcher | None = local_sources_watcher
+        self._local_sources_watcher: LocalSourcesWatcher = LocalSourcesWatcher(
+            self._script_data.main_script_path, self._pages_manager
+        )
         self._stop_config_listener: Callable[[], bool] | None = None
         self._stop_pages_listener: Callable[[], None] | None = None
 
@@ -184,18 +187,13 @@ class AppSession:
         called again in the case when a session is disconnected and is being reconnect
         to.
         """
-        if self._local_sources_watcher is None:
-            self._local_sources_watcher = LocalSourcesWatcher(
-                self._script_data.main_script_path
-            )
-
         self._local_sources_watcher.register_file_change_callback(
             self._on_source_file_changed
         )
         self._stop_config_listener = config.on_config_parsed(
             self._on_source_file_changed, force_connect=True
         )
-        self._stop_pages_listener = source_util.register_pages_changed_callback(
+        self._stop_pages_listener = self._pages_manager.register_pages_changed_callback(
             self._on_pages_changed
         )
         secrets_singleton.file_change_listener.connect(self._on_secrets_file_changed)
@@ -411,6 +409,7 @@ class AppSession:
             initial_rerun_data=initial_rerun_data,
             user_info=self._user_info,
             fragment_storage=self._fragment_storage,
+            pages_manager=self._pages_manager,
         )
         self._scriptrunner.on_event.connect(self._on_scriptrunner_event)
         self._scriptrunner.start()
@@ -421,7 +420,7 @@ class AppSession:
 
     def _should_rerun_on_file_change(self, filepath: str) -> bool:
         main_script_path = self._script_data.main_script_path
-        pages = source_util.get_pages(main_script_path)
+        pages = self._pages_manager.get_pages(main_script_path)
 
         changed_page_script_hash = next(
             filter(lambda k: pages[k]["script_path"] == filepath, pages),
@@ -458,7 +457,7 @@ class AppSession:
 
     def _on_pages_changed(self, _) -> None:
         msg = ForwardMsg()
-        _populate_app_pages(msg.pages_changed, self._script_data.main_script_path)
+        self._populate_app_pages(msg.pages_changed, self._script_data.main_script_path)
         self._enqueue_forward_msg(msg)
 
         if self._local_sources_watcher is not None:
@@ -682,8 +681,8 @@ class AppSession:
         if fragment_ids_this_run:
             msg.new_session.fragment_ids_this_run.extend(fragment_ids_this_run)
 
-        _populate_app_pages(msg.new_session, self._script_data.main_script_path)
-        _populate_config_msg(msg.new_session.config)
+        self._populate_app_pages(msg.new_session, self._script_data.main_script_path)
+        _populate_config_msg(msg.new_session.config, self._pages_manager.is_v2)
         _populate_theme_msg(msg.new_session.custom_theme)
 
         # Immutable session data. We send this every time a new session is
@@ -833,6 +832,16 @@ class AppSession:
 
         self._enqueue_forward_msg(msg)
 
+    def _populate_app_pages(
+        self, msg: NewSession | PagesChanged, main_script_path: str
+    ) -> None:
+        for page_script_hash, page_info in self._pages_manager.get_pages().items():
+            page_proto = msg.app_pages.add()
+
+            page_proto.page_script_hash = page_script_hash
+            page_proto.page_name = page_info["page_name"]
+            page_proto.icon = page_info["icon"]
+
 
 # Config.ToolbarMode.ValueType does not exist at runtime (only in the pyi stubs), so
 # we need to use quotes.
@@ -855,14 +864,14 @@ def _get_toolbar_mode() -> Config.ToolbarMode.ValueType:
     return enum_value
 
 
-def _populate_config_msg(msg: Config) -> None:
+def _populate_config_msg(msg: Config, is_mpa_v2: bool) -> None:
     msg.gather_usage_stats = config.get_option("browser.gatherUsageStats")
     msg.max_cached_message_age = config.get_option("global.maxCachedMessageAge")
     msg.allow_run_on_save = config.get_option("server.allowRunOnSave")
     msg.hide_top_bar = config.get_option("ui.hideTopBar")
     # ui.hideSidebarNav is deprecated, will be removed in the future
     msg.hide_sidebar_nav = config.get_option("ui.hideSidebarNav")
-    if config.get_option("client.showSidebarNavigation") == False:
+    if config.get_option("client.showSidebarNavigation") == False or is_mpa_v2:
         msg.hide_sidebar_nav = True
     msg.toolbar_mode = _get_toolbar_mode()
 
@@ -917,12 +926,3 @@ def _populate_theme_msg(msg: CustomThemeConfig) -> None:
 def _populate_user_info_msg(msg: UserInfo) -> None:
     msg.installation_id = Installation.instance().installation_id
     msg.installation_id_v3 = Installation.instance().installation_id_v3
-
-
-def _populate_app_pages(msg: NewSession | PagesChanged, main_script_path: str) -> None:
-    for page_script_hash, page_info in source_util.get_pages(main_script_path).items():
-        page_proto = msg.app_pages.add()
-
-        page_proto.page_script_hash = page_script_hash
-        page_proto.page_name = page_info["page_name"]
-        page_proto.icon = page_info["icon"]

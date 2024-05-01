@@ -58,6 +58,7 @@ export interface SidebarProps {
   hasElements: boolean
   appLogo: Logo | null
   appPages: IAppPage[]
+  navPageSections: Map<string, { start: number; length: number }>
   onPageChange: (pageName: string) => void
   currentPageScriptHash: string
   hideSidebarNav: boolean
@@ -259,6 +260,7 @@ class Sidebar extends PureComponent<SidebarProps, State> {
       onPageChange,
       currentPageScriptHash,
       hideSidebarNav,
+      navPageSections,
     } = this.props
 
     // Handles checking the URL params
@@ -337,6 +339,7 @@ class Sidebar extends PureComponent<SidebarProps, State> {
                 appPages={appPages}
                 collapseSidebar={this.toggleCollapse}
                 currentPageScriptHash={currentPageScriptHash}
+                navPageSections={navPageSections}
                 hasSidebarElements={hasElements}
                 hideParentScrollbar={this.hideScrollbar}
                 onPageChange={onPageChange}
