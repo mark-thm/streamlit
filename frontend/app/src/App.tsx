@@ -131,6 +131,11 @@ export interface Props {
   theme: ThemeManager
 }
 
+interface AppLogo {
+  logo: Logo
+  pageScriptHash: string
+}
+
 interface State {
   connectionState: ConnectionState
   elements: AppRoot
@@ -152,7 +157,7 @@ interface State {
   formsData: FormsData
   hideTopBar: boolean
   hideSidebarNav: boolean
-  appLogo: Logo | null
+  appLogo: AppLogo | null
   appPages: IAppPage[]
   navPageSections: Map<string, { start: number; length: number }>
   currentPageScriptHash: string
@@ -171,6 +176,7 @@ interface State {
   appConfig: AppConfig
   autoReruns: NodeJS.Timer[]
   inputsDisabled: boolean
+  mainScriptHash: string
 }
 
 const ELEMENT_LIST_BUFFER_TIMEOUT_MS = 10
@@ -243,7 +249,7 @@ export class App extends PureComponent<Props, State> {
 
     this.state = {
       connectionState: ConnectionState.INITIAL,
-      elements: AppRoot.empty(true),
+      elements: AppRoot.empty("", true),
       isFullScreen: false,
       scriptName: "",
       scriptRunId: INITIAL_SCRIPT_RUN_ID,
@@ -289,6 +295,7 @@ export class App extends PureComponent<Props, State> {
       appConfig: {},
       autoReruns: [],
       inputsDisabled: false,
+      mainScriptHash: "",
     }
 
     this.connectionManager = null
@@ -644,7 +651,14 @@ export class App extends PureComponent<Props, State> {
           this.uploadClient.onFileURLsResponse(fileURLsResponse),
         parentMessage: (parentMessage: ParentMessage) =>
           this.handleCustomParentMessage(parentMessage),
-        logo: (logo: Logo) => this.setState({ appLogo: logo }),
+        logo: (logo: Logo) => {
+          this.setState({
+            appLogo: {
+              logo,
+              pageScriptHash: msgProto.metadata?.pageScriptHash ?? "",
+            },
+          })
+        },
       })
     } catch (e) {
       const err = ensureError(e)
@@ -895,6 +909,7 @@ export class App extends PureComponent<Props, State> {
       mainScriptPath,
       fragmentIdsThisRun,
       pageScriptHash: newPageScriptHash,
+      mainScriptHash,
     } = newSessionProto
 
     // mainPage must be a string as we're guaranteed at this point that
@@ -907,7 +922,8 @@ export class App extends PureComponent<Props, State> {
     const newPageName = newSessionProto.appPages.find(
       p => p.pageScriptHash === newPageScriptHash
     )?.pageName as string
-    const viewingMainPage = newPageScriptHash === mainPage.pageScriptHash
+    const viewingMainPage =
+      newPageScriptHash === mainPage.pageScriptHash || newPageScriptHash === ""
 
     if (!fragmentIdsThisRun.length) {
       // This is a normal rerun, remove all the auto reruns intervals
@@ -952,7 +968,8 @@ export class App extends PureComponent<Props, State> {
         {
           allowRunOnSave: config.allowRunOnSave,
           hideTopBar: config.hideTopBar,
-          hideSidebarNav: config.hideSidebarNav,
+          hideSidebarNav:
+            this.state.navPageSections.size === 0 && config.hideSidebarNav,
           toolbarMode: config.toolbarMode,
           appPages: newSessionProto.appPages,
           currentPageScriptHash: newPageScriptHash,
@@ -960,6 +977,7 @@ export class App extends PureComponent<Props, State> {
           // If we're here, the fragmentIdsThisRun variable is always the
           // empty array.
           fragmentIdsThisRun,
+          mainScriptHash,
         },
         () => {
           this.hostCommunicationMgr.sendMessageToHost({
@@ -977,7 +995,7 @@ export class App extends PureComponent<Props, State> {
 
       // Set the title and favicon to their default values if we are not running
       // a fragment.
-      document.title = `${newPageName} · Streamlit`
+      document.title = `${newPageName ?? ""} · Streamlit`
       handleFavicon(
         `${process.env.PUBLIC_URL}/favicon.png`,
         this.hostCommunicationMgr.sendMessageToHost,
@@ -1010,7 +1028,12 @@ export class App extends PureComponent<Props, State> {
         scriptRunId,
       })
     } else {
-      this.clearAppState(newSessionHash, scriptRunId, scriptName)
+      this.clearAppState(
+        newSessionHash,
+        scriptRunId,
+        scriptName,
+        mainScriptHash
+      )
     }
   }
 
@@ -1181,22 +1204,28 @@ export class App extends PureComponent<Props, State> {
   clearAppState(
     appHash: string,
     scriptRunId: string,
-    scriptName: string
+    scriptName: string,
+    mainScriptHash: string
   ): void {
-    const { hideSidebarNav, elements } = this.state
+    // const { hideSidebarNav, elements } = this.state
     // Handle hideSidebarNav = true -> retain sidebar elements to avoid flicker
-    const sidebarElements = (hideSidebarNav && elements.sidebar) || undefined
+    // const sidebarElements = (hideSidebarNav && elements.sidebar) || undefined
 
     this.setState(
       {
         scriptRunId,
         scriptName,
         appHash,
-        elements: AppRoot.empty(false, sidebarElements),
+        elements: this.state.elements.clearPageNodes(mainScriptHash),
       },
       () => {
         this.pendingElementsBuffer = this.state.elements
-        this.widgetMgr.removeInactive(new Set([]))
+        const activeWidgetIds = new Set(
+          Array.from(this.state.elements.getElements())
+            .map(element => getElementWidgetID(element))
+            .filter(notUndefined)
+        )
+        this.widgetMgr.removeInactive(activeWidgetIds)
       }
     )
   }
@@ -1356,7 +1385,12 @@ export class App extends PureComponent<Props, State> {
   }
 
   onPageChange = (pageScriptHash: string): void => {
-    this.setState({ appLogo: null })
+    if (
+      this.state.appLogo &&
+      this.state.appLogo.pageScriptHash !== this.state.mainScriptHash
+    ) {
+      this.setState({ appLogo: null })
+    }
     this.sendRerunBackMsg(undefined, undefined, pageScriptHash)
   }
 
@@ -1868,7 +1902,7 @@ export class App extends PureComponent<Props, State> {
                 uploadClient={this.uploadClient}
                 componentRegistry={this.componentRegistry}
                 formsData={this.state.formsData}
-                appLogo={this.state.appLogo}
+                appLogo={this.state.appLogo?.logo ?? null}
                 appPages={this.state.appPages}
                 navPageSections={this.state.navPageSections}
                 onPageChange={this.onPageChange}

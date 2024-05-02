@@ -310,7 +310,7 @@ class MultiSelectMixin:
             max_selections=max_selections,
             placeholder=placeholder,
             form_id=current_form_id(self.dg),
-            page=ctx.page_script_hash if ctx else None,
+            page=ctx.active_page_script_hash if ctx else None,
         )
 
         default_value: list[int] = [] if indices is None else indices

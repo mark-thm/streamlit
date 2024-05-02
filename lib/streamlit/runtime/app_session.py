@@ -321,7 +321,7 @@ class AppSession:
         self._on_scriptrunner_event(
             self._scriptrunner,
             ScriptRunnerEvent.SCRIPT_STARTED,
-            page_script_hash="",
+            page_script_hash=self._pages_manager._main_script_hash,
         )
         self._on_scriptrunner_event(
             self._scriptrunner, ScriptRunnerEvent.SCRIPT_STOPPED_WITH_SUCCESS
@@ -419,8 +419,7 @@ class AppSession:
         return self._session_state
 
     def _should_rerun_on_file_change(self, filepath: str) -> bool:
-        main_script_path = self._script_data.main_script_path
-        pages = self._pages_manager.get_pages(main_script_path)
+        pages = self._pages_manager.get_pages()
 
         changed_page_script_hash = next(
             filter(lambda k: pages[k]["script_path"] == filepath, pages),
@@ -675,7 +674,8 @@ class AppSession:
 
         msg.new_session.script_run_id = _generate_scriptrun_id()
         msg.new_session.name = self._script_data.name
-        msg.new_session.main_script_path = self._script_data.main_script_path
+        msg.new_session.main_script_path = self._pages_manager._main_script_path
+        msg.new_session.main_script_hash = self._pages_manager._main_script_hash
         msg.new_session.page_script_hash = page_script_hash
 
         if fragment_ids_this_run:

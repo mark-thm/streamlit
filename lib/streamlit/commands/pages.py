@@ -71,17 +71,27 @@ class Page:
             self._url_path = url_path or inferred_name
 
     def run(self) -> None:
-        if callable(self._page):
-            self._page()
-            return
+        ctx = get_script_run_ctx()
+        assert ctx
 
-        with open(self._page, "r") as file:
-            script_content = file.read()
+        ex = None
+        with ctx.pages_manager.set_page_hash_context(self._script_hash):
+            try:
+                if callable(self._page):
+                    self._page()
+                    return
 
-        # TODO(kmcgrady): Not a fan of this, but it's the simplest way
-        # Informing of the script hash
-        exec_globals = {"__file__": self._page}
-        exec(script_content, exec_globals)
+                with open(self._page, "r") as file:
+                    script_content = file.read()
+
+                # TODO(kmcgrady): Needs more thought, but it's a good start
+                exec_globals = {"__file__": self._page}
+                exec(script_content, exec_globals)
+            except Exception as e:
+                ex = e
+
+        if ex:
+            raise ex
 
     @property
     def _script_hash(self) -> str:
@@ -109,7 +119,6 @@ def navigation(
     assert ctx
 
     pgs = Pages(pages)
-    ctx.page_script_hash
 
     page_list = pgs.page_list
     defaults = [page for page in page_list if page.default]
@@ -140,13 +149,14 @@ def navigation(
 
     # Inform our page manager about the set of pages we have
     ctx.pages_manager.set_pages(pgs.as_source_util_pages())
+    page_script_hash = ctx.pages_manager.current_page_script_hash()
 
     try:
         # TODO(kmcgrady): Handle page name/url path as well
-        page = pgs.get_page_by_hash(ctx.page_script_hash)
+        page = pgs.get_page_by_hash(page_script_hash)
     except KeyError:
         print(
-            f"could not find page for {ctx.page_script_hash}, falling back to default page"
+            f"could not find page for {page_script_hash}, falling back to default page"
         )
         page = default_page
     return page

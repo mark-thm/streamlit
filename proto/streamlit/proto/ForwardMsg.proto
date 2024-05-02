@@ -119,6 +119,12 @@ message ForwardMsgMetadata {
 
   // DEPRECATED: This is not used anymore.
   ElementDimensionSpec element_dimension_spec = 3;
+
+  // page_script_hash the forward message is associated from.
+  // For multipage apps v1, this will always be the script running
+  // For multipage apps v2, this can be the main script or the page script
+  // TODO(kmcgrady): Or a function?
+  string page_script_hash = 4;
 }
 
 // DEPRECATED: This is not used anymore.

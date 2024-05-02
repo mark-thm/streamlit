@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 import threading
 from enum import Enum
@@ -96,17 +97,47 @@ class MultipageAppsVersion(Enum):
     V2 = 2
 
 
+class ActivePageContext:
+    def __init__(self, original_page_script_hash: str):
+        self.original_page_script_hash = original_page_script_hash
+
+    def __enter__(self):
+        from streamlit import config
+
+        config._active_page_context = self
+
+    def __exit__(self, *args):
+        from streamlit import config
+
+        config._active_page_context = None
+
+
 class V1PagesManager:
     version: Final = MultipageAppsVersion.V1
 
     def __init__(self, parent):
         self._parent = parent
+        self._current_page_hash = self._parent._main_script_hash
 
     def get_main_page(self):
         return {
             "script_path": self._parent._main_script_path,
             "script_hash": self._parent._main_script_hash,
         }
+
+    def get_active_page_script_hash(self):
+        return self._current_page_hash
+
+    def get_current_page_script_hash(self):
+        return self._current_page_hash
+
+    def set_active_page_script_hash(self, _):
+        raise NotImplementedError(
+            "Cannot set active page in version 1 of multipage apps."
+        )
+
+    def set_current_page_script_hash(self, page_hash):
+        self._current_page_hash = page_hash
 
     def get_page_by_run(self, page_script_hash, page_name):
         pages = self.get_pages()
@@ -135,6 +166,12 @@ class V1PagesManager:
             # If no information about what page to run is given, default to
             # running the main page.
             current_page_info = main_page_info
+
+        # TODO(kmcgrady): I don't like this, but it simplifies the logic
+        if current_page_info is None:
+            self._parent.set_current_page_script_hash(
+                current_page_info["page_script_hash"]
+            )
 
         return current_page_info
 
@@ -189,12 +226,26 @@ class V2PagesManager:
     def __init__(self, parent):
         self._parent = parent
         self._pages = None
+        self._current_page_hash = self._parent._main_script_hash
+        self._active_page_hash = self._parent._main_script_hash
 
     def get_main_page(self):
         return {
             "script_path": self._parent._main_script_path,
             "script_hash": self._parent._main_script_hash,  # Default Hash
         }
+
+    def get_active_page_script_hash(self):
+        return self._active_page_hash
+
+    def get_current_page_script_hash(self):
+        return self._current_page_hash
+
+    def set_active_page_script_hash(self, page_hash):
+        self._active_page_hash = page_hash
+
+    def set_current_page_script_hash(self, page_hash):
+        self._current_page_hash = page_hash
 
     def get_page_by_run(self, page_script_hash, page_name):
         pages = self.get_pages()
@@ -230,7 +281,7 @@ class V2PagesManager:
         return self._pages or {
             self._parent._main_script_hash: {
                 "page_script_hash": self._parent._main_script_hash,
-                "page_name": "Main",
+                "page_name": "",
                 "icon": "",
                 "script_path": self._parent._main_script_path,
             }
@@ -252,6 +303,25 @@ class PagesManager:
 
     def get_main_page(self):
         return self._version_manager.get_main_page()
+
+    def get_active_page_script_hash(self):
+        return self._version_manager.get_active_page_script_hash()
+
+    def set_active_page_script_hash(self, page_hash):
+        self._version_manager.set_active_page_script_hash(page_hash)
+
+    def current_page_script_hash(self):
+        return self._version_manager.get_current_page_script_hash()
+
+    def set_current_page_script_hash(self, page_hash):
+        self._version_manager.set_current_page_script_hash(page_hash)
+
+    @contextlib.contextmanager
+    def set_page_hash_context(self, page_hash):
+        original_page_hash = self.get_active_page_script_hash()
+        self.set_active_page_script_hash(page_hash)
+        yield
+        self.set_active_page_script_hash(original_page_hash)
 
     def get_page_by_run(self, page_script_hash, page_name):
         return self._version_manager.get_page_by_run(page_script_hash, page_name)

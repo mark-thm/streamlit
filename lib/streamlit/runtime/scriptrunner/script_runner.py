@@ -294,7 +294,6 @@ class ScriptRunner:
             session_state=self._session_state,
             uploaded_file_mgr=self._uploaded_file_mgr,
             main_script_path=self._main_script_path,
-            page_script_hash="",
             user_info=self._user_info,
             gather_usage_stats=bool(config.get_option("browser.gatherUsageStats")),
             fragment_storage=self._fragment_storage,
@@ -441,6 +440,13 @@ class ScriptRunner:
                 else main_page_info["page_script_hash"]
             )
 
+            print(
+                "MAIN SCRIPT HASH",
+                main_page_info["script_hash"],
+            )
+            print("CURRENT PAGE", current_page_info)
+            print("CURRENT PAGE SCRIPT HASH", page_script_hash)
+
             fragment_ids_this_run = set(rerun_data.fragment_id_queue)
 
             # Clear widget state on page change. This normally happens implicitly
@@ -458,8 +464,8 @@ class ScriptRunner:
             ctx = self._get_script_run_ctx()
             ctx.reset(
                 query_string=rerun_data.query_string,
-                page_script_hash=page_script_hash,
                 fragment_ids_this_run=fragment_ids_this_run,
+                page_script_hash=page_script_hash,
             )
 
             self.on_event.send(
