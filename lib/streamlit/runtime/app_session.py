@@ -131,7 +131,9 @@ class AppSession:
         self._script_data = script_data
         self._uploaded_file_mgr = uploaded_file_manager
         self._script_cache = script_cache
-        self._pages_manager = PagesManager(self._script_data.main_script_path)
+        self._pages_manager = PagesManager(
+            self._script_data.main_script_path, self._on_pages_changed
+        )
 
         # The browser queue contains messages that haven't yet been
         # delivered to the browser. Periodically, the server flushes

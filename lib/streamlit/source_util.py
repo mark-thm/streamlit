@@ -26,6 +26,7 @@ from blinker import Signal
 from streamlit.logger import get_logger
 from streamlit.string_util import extract_leading_emoji
 from streamlit.util import calc_md5
+from streamlit.watcher import watch_dir
 
 _LOGGER: Final = get_logger(__name__)
 
@@ -114,10 +115,32 @@ class ActivePageContext:
 
 class V1PagesManager:
     version: Final = MultipageAppsVersion.V1
+    is_watching_pages_dir: bool = False
 
     def __init__(self, parent):
         self._parent = parent
         self._current_page_hash = self._parent._main_script_hash
+        V1PagesManager._watch_pages_dir(self._parent)
+
+    # This is a static method because we only want to watch the pages directory
+    # once on initial load.
+    @staticmethod
+    def _watch_pages_dir(pages_manager):
+        if V1PagesManager.is_watching_pages_dir:
+            return
+
+        def _on_pages_changed(_path: str) -> None:
+            pages_manager.invalidate_pages_cache()
+
+        main_script_path = Path(pages_manager._main_script_path)
+        pages_dir = main_script_path.parent / "pages"
+        watch_dir(
+            str(pages_dir),
+            _on_pages_changed,
+            glob_pattern="*.py",
+            allow_nonexistent=True,
+        )
+        V1PagesManager.is_watching_pages_dir = True
 
     def get_main_page(self):
         return {
@@ -294,9 +317,9 @@ class V2PagesManager:
 class PagesManager:
     _cached_pages: dict[str, dict[str, str]] | None = None
     _pages_cache_lock = threading.RLock()
-    _on_pages_changed = Signal(doc="Emitted when the pages directory is changed")
+    _on_pages_changed = Signal(doc="Emitted when the set of pages has changed")
 
-    def __init__(self, main_script_path):
+    def __init__(self, main_script_path, on_pages_changed):
         self._main_script_path = main_script_path
         self._main_script_hash = calc_md5(main_script_path)
         self._version_manager = self._detect_multipage_mode()
@@ -355,6 +378,7 @@ class PagesManager:
             vm_pages = self._version_manager.set_pages(pages)
 
         self._cached_pages = vm_pages
+        self._on_pages_changed.send()
 
     @property
     def version(self):
