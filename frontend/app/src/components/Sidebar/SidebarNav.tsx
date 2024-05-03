@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
-import React, { ReactElement, useCallback, useRef, useState } from "react"
+import React, {
+  ReactElement,
+  useCallback,
+  useRef,
+  useState,
+  useEffect,
+} from "react"
 import { AppContext } from "@streamlit/app/src/components/AppContext"
 // We import react-device-detect in this way so that tests can mock its
 // isMobile field sanely.
 import * as reactDeviceDetect from "react-device-detect"
-import { ExpandMore, ExpandLess } from "@emotion-icons/material-outlined"
 
 import { DynamicIcon } from "@streamlit/lib/src/components/shared/Icon"
 import {
-  Icon,
   // EmojiIcon,
   useIsOverflowing,
   StreamlitEndpoints,
@@ -36,8 +40,9 @@ import {
   StyledSidebarNavLink,
   StyledSidebarLinkText,
   StyledSidebarNavLinkContainer,
-  StyledSidebarNavSeparatorContainer,
   StyledSidebarNavSectionHeader,
+  StyledViewButton,
+  StyledSidebarNavSeparator,
 } from "./styled-components"
 
 export interface Props {
@@ -47,7 +52,6 @@ export interface Props {
   collapseSidebar: () => void
   currentPageScriptHash: string
   hasSidebarElements: boolean
-  hideParentScrollbar: (newValue: boolean) => void
   onPageChange: (pageName: string) => void
 }
 
@@ -129,25 +133,19 @@ const SidebarNav = ({
   collapseSidebar,
   currentPageScriptHash,
   hasSidebarElements,
-  hideParentScrollbar,
   onPageChange,
 }: Props): ReactElement | null => {
-  const { pageLinkBaseUrl } = React.useContext(AppContext)
-  const [expanded, setExpanded] = useState(false)
+  // const { pageLinkBaseUrl } = React.useContext(AppContext)
+  const [expanded, setExpanded] = useState(hasSidebarElements ? false : true)
   const navItemsRef = useRef<HTMLUListElement>(null)
   const isOverflowing = useIsOverflowing(navItemsRef, expanded)
 
-  const onMouseOver = useCallback(() => {
-    if (isOverflowing) {
-      hideParentScrollbar(true)
-    }
-  }, [isOverflowing, hideParentScrollbar])
+  // TODO(kmcgrady / mayagbarnes): from v1 - should apply in v2?
+  // if (appPages.length < 2) {
+  //   return null
+  // }
 
-  const onMouseOut = useCallback(
-    () => hideParentScrollbar(false),
-    [hideParentScrollbar]
-  )
-
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const toggleExpanded = useCallback(() => {
     if (!expanded && isOverflowing) {
       setExpanded(true)
@@ -156,6 +154,17 @@ const SidebarNav = ({
     }
   }, [expanded, isOverflowing])
 
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (hasSidebarElements && expanded) {
+      setExpanded(false)
+    }
+    if (!hasSidebarElements && !expanded) {
+      setExpanded(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPageScriptHash, hasSidebarElements])
+
   const entries = Array.from(navPageSections.entries())
 
   return (
@@ -163,10 +172,7 @@ const SidebarNav = ({
       <StyledSidebarNavItems
         ref={navItemsRef}
         isExpanded={expanded}
-        isOverflowing={isOverflowing}
         hasSidebarElements={hasSidebarElements}
-        onMouseOver={onMouseOver}
-        onMouseOut={onMouseOut}
         data-testid="stSidebarNavItems"
       >
         {entries.map(([header, section]) => {
@@ -223,27 +229,25 @@ const SidebarNav = ({
       </StyledSidebarNavItems>
 
       {hasSidebarElements && (
-        <StyledSidebarNavSeparatorContainer
-          data-testid="stSidebarNavSeparator"
-          isExpanded={expanded}
-          isOverflowing={isOverflowing}
-          onClick={toggleExpanded}
-        >
+        <>
           {isOverflowing && !expanded && (
-            <Icon
-              content={ExpandMore}
-              size="md"
-              testid="stSidebarNavExpandIcon"
-            />
+            <StyledViewButton
+              onClick={toggleExpanded}
+              data-testid="stSidebarNavViewMore"
+            >
+              View more
+            </StyledViewButton>
           )}
           {expanded && (
-            <Icon
-              content={ExpandLess}
-              size="md"
-              testid="stSidebarNavCollapseIcon"
-            />
+            <StyledViewButton
+              onClick={toggleExpanded}
+              data-testid="stSidebarNavViewLess"
+            >
+              View less
+            </StyledViewButton>
           )}
-        </StyledSidebarNavSeparatorContainer>
+          <StyledSidebarNavSeparator data-testid="stSidebarNavSeparator" />
+        </>
       )}
     </StyledSidebarNavContainer>
   )
