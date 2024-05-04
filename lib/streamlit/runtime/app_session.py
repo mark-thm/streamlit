@@ -147,9 +147,7 @@ class AppSession:
         # due to the source code changing we need to pass in the previous client state.
         self._client_state = ClientState()
 
-        self._local_sources_watcher: LocalSourcesWatcher = LocalSourcesWatcher(
-            self._script_data.main_script_path, self._pages_manager
-        )
+        self._local_sources_watcher: LocalSourcesWatcher = None
         self._stop_config_listener: Callable[[], bool] | None = None
         self._stop_pages_listener: Callable[[], None] | None = None
 
@@ -189,6 +187,11 @@ class AppSession:
         called again in the case when a session is disconnected and is being reconnect
         to.
         """
+        if self._local_sources_watcher is None:
+            self._local_sources_watcher = LocalSourcesWatcher(
+                self._script_data.main_script_path, self._pages_manager
+            )
+
         self._local_sources_watcher.register_file_change_callback(
             self._on_source_file_changed
         )

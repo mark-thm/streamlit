@@ -84,7 +84,7 @@ export interface AppViewProps {
 
   appLogo: Logo | null
 
-  navPageSections: Map<string, { start: number; length: number }>
+  navPageSections: Map<string, IAppPage[]>
 
   appPages: IAppPage[]
 

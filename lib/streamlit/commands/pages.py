@@ -56,6 +56,12 @@ class Page:
         if isinstance(page, Path):
             inferred_icon, inferred_name = page_icon_and_name(page)
         else:
+            # A this point page can only be a callable
+            if not page.__name__:
+                raise StreamlitAPIException(
+                    "Cannot infer page name from callable page. Please provide a title."
+                )
+
             inferred_name = page.__name__
 
         name = title or inferred_name
@@ -68,7 +74,7 @@ class Page:
         if default:
             self._url_path = ""
         else:
-            self._url_path = url_path or inferred_name
+            self._url_path = url_path or inferred_name.replace(" ", "_")
 
     def run(self) -> None:
         ctx = get_script_run_ctx()
@@ -88,6 +94,7 @@ class Page:
                 exec_globals = {"__file__": self._page}
                 exec(script_content, exec_globals)
             except Exception as e:
+                # Catch the exception so we can raise it after we've reset the active page
                 ex = e
 
         if ex:
@@ -145,8 +152,6 @@ def navigation(
             p.url_path = page._url_path
             p.icon = page.icon or ""
 
-    ctx.enqueue(msg)
-
     # Inform our page manager about the set of pages we have
     ctx.pages_manager.set_pages(pgs.as_source_util_pages())
     page_script_hash = ctx.pages_manager.current_page_script_hash()
@@ -159,6 +164,9 @@ def navigation(
             f"could not find page for {page_script_hash}, falling back to default page"
         )
         page = default_page
+    msg.navigation.page_script_hash = page._script_hash
+
+    ctx.enqueue(msg)
     return page
 
 

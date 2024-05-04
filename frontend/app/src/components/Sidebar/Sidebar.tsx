@@ -58,7 +58,7 @@ export interface SidebarProps {
   hasElements: boolean
   appLogo: Logo | null
   appPages: IAppPage[]
-  navPageSections: Map<string, { start: number; length: number }>
+  navPageSections: Map<string, IAppPage[]>
   onPageChange: (pageName: string) => void
   currentPageScriptHash: string
   hideSidebarNav: boolean
